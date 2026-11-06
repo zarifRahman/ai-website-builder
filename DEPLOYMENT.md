@@ -79,19 +79,32 @@ The web app is a standard Next.js app in a pnpm monorepo. A `apps/web/vercel.jso
 
 > `NEXT_PUBLIC_API_URL` is baked in at build time (it's a `NEXT_PUBLIC_*` var). If you change the API URL later, **redeploy** the web app.
 
-### ⚠️ If your Vercel build fails with `templates/vite-react/...` or `openai.ts ... not constructable`
+### ⚠️ If your Vercel build fails with `templates/vite-react/...`, `@vitejs/plugin-react`, or `openai.ts ... not constructable`
 
-That means Vercel is trying to **build the API** (`apps/api`) instead of just the
-web app. The API must never be built or run on Vercel. Fix it in the Vercel
-project settings:
+All of these mean the same thing: Vercel is **building the API / the whole repo**
+instead of just the web app, and is compiling the `apps/api/templates/vite-react`
+seed project (a nested sub-project whose deps are intentionally not installed).
+The API and the templates must **never** be built on Vercel.
 
-- **Settings → General → Root Directory = `apps/web`** (not the repo root, not `apps/api`).
-- Make sure the **Build Command** is the default / `pnpm --filter web build` (the
-  included `apps/web/vercel.json` already sets this) — **not** the root `pnpm build`,
-  which runs `pnpm -r build` and would compile the API too.
+The repo ships two configs that force a web-only build — a root `vercel.json` and
+`apps/web/vercel.json`, both running `pnpm --filter web build`. Make sure your
+Vercel **Project Settings** aren't overriding them:
 
-With the root set to `apps/web`, Vercel never touches `apps/api` or the
-`templates/` folder, and the error disappears.
+| Setting | Correct value |
+|---|---|
+| **Root Directory** | `apps/web` (recommended) — or leave at repo root; the root `vercel.json` handles it |
+| **Build Command** | **Override OFF**, or `pnpm --filter web build`. **Not** `pnpm build` / `pnpm -r build` / `tsc` |
+| **Install Command** | **Override OFF**, or `pnpm install --frozen-lockfile` |
+| **Framework Preset** | Next.js |
+
+Most often this error comes from a leftover **custom Build Command** (e.g.
+`pnpm build` or `tsc`) in the Vercel dashboard — clear it, redeploy, and the
+template/openai errors disappear. `pnpm --filter web build` compiles only the
+Next.js app and never touches `apps/api` or `templates/`.
+
+The code also now (a) excludes `templates`/`.data` from the API's own tsconfig and
+(b) constructs the OpenAI client interop-safely, so even a correct API build on
+Docker/EC2/CI stays clean.
 
 ### Why `apps/web` as root works
 
