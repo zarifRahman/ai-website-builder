@@ -1,0 +1,32 @@
+# Fly.io config for the Builder API.
+# Deploy from the REPO ROOT (the Dockerfile copies the whole pnpm workspace):
+#   fly launch --no-deploy --copy-config --dockerfile apps/api/Dockerfile
+#   fly secrets set DATABASE_URL=... ANTHROPIC_API_KEY=... WEB_ORIGIN=https://your-app.vercel.app
+#   fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile .
+app = "ai-website-builder-api"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[env]
+  PORT = "4000"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  # A persistent server (preview processes + local git workspaces) — don't
+  # auto-stop, and keep at least one machine running.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Persistent disk for apps/api/.data (project workspaces + snapshot tars).
+[mounts]
+  source = "aab_data"
+  destination = "/app/apps/api/.data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"

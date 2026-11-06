@@ -1,0 +1,65 @@
+# Single-host deployment: Postgres + API + Web in one stack.
+#
+#   1. cp .env.docker.example .env   (then fill in your API keys)
+#   2. docker compose up --build
+#
+# Web  → http://localhost:3000
+# API  → http://localhost:4000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aab
+      POSTGRES_PASSWORD: aab
+      POSTGRES_DB: aab
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aab -d aab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://aab:aab@db:5432/aab
+      PORT: "4000"
+      WEB_ORIGIN: http://localhost:3000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEFAULT_ENGINE: ${DEFAULT_ENGINE:-opus}
+    ports:
+      - "4000:4000"
+      - "4100-4299:4100-4299" # preview (Vite) dev servers
+    volumes:
+      - api-data:/app/apps/api/.data # persistent project workspaces + snapshots
+    # Run migrations, then start the server.
+    command: >
+      sh -c "cd /app && pnpm --filter @aab/api db:migrate &&
+             cd /app/apps/api && node dist/index.js"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    depends_on:
+      - api
+    environment:
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+
+volumes:
+  db-data:
+  api-data:

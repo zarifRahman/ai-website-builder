@@ -102,7 +102,53 @@ Checklist:
 
 ---
 
-## 5. Can I put everything on Vercel?
+## 5. Alternative: run the whole stack on one host (Docker)
+
+If you'd rather skip Vercel and run **everything together** (Postgres + API + Web), use the included Docker setup.
+
+### Local / single-VM with docker compose
+
+```bash
+cp .env.docker.example .env      # fill in at least one *_API_KEY
+docker compose up --build
+```
+
+- Web → http://localhost:3000
+- API → http://localhost:4000
+- Postgres runs in-stack; migrations run automatically on API start.
+- Project workspaces + snapshots persist in the `api-data` volume.
+
+This works on any Docker host (a VPS/droplet, EC2, etc.). Put a reverse proxy
+(Caddy/Nginx) in front for TLS, and change the `web` build arg
+`NEXT_PUBLIC_API_URL` + the API's `WEB_ORIGIN` to your real domains.
+
+Files: `docker-compose.yml`, `apps/api/Dockerfile`, `apps/web/Dockerfile`, `.dockerignore`.
+
+### API on Fly.io (persistent VM + volume)
+
+Fly is a good fit for the API because it gives a real VM with a persistent disk
+for the preview sandboxes. Config: `apps/api/fly.toml`.
+
+```bash
+# from the repo root
+fly launch --no-deploy --copy-config --dockerfile apps/api/Dockerfile
+fly volumes create aab_data --size 3 --region sjc
+fly secrets set \
+  DATABASE_URL="postgres://..." \
+  ANTHROPIC_API_KEY="sk-ant-..." \
+  WEB_ORIGIN="https://your-app.vercel.app"
+fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile .
+```
+
+Then point the web app's `NEXT_PUBLIC_API_URL` at your Fly URL (whether web is
+on Vercel or in the same Docker stack).
+
+> You can mix and match: **web on Vercel + API on Fly** is the recommended
+> production split; **all-in-one docker compose** is simplest for a personal/VPS setup.
+
+---
+
+## 6. Can I put everything on Vercel?
 
 **No — not the API as written.** Vercel is serverless: no persistent filesystem, no long-lived child processes, and a short execution limit. The API:
 
