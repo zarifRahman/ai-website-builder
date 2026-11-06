@@ -148,6 +148,87 @@ on Vercel or in the same Docker stack).
 
 ---
 
+## 5b. Deploy on an AWS EC2 instance
+
+EC2 is a plain VM, so the **all-in-one Docker stack** runs there directly — this
+is the recommended way to get the full product (including live previews) on one box.
+
+### Step 1 — Launch the instance (AWS Console, one-time)
+
+1. **EC2 → Launch instance.**
+2. **AMI:** Ubuntu Server 24.04 LTS.
+3. **Type:** `t3.small` minimum (2 GB RAM); `t3.medium` (4 GB) recommended — `npm install` for generated apps is memory-hungry.
+4. **Key pair:** select/create one and download the `.pem` (you'll SSH with it).
+5. **Storage:** 20–30 GB gp3 (project workspaces + node_modules add up).
+6. **Security group — inbound rules:**
+   | Type | Port | Source |
+   |---|---|---|
+   | SSH | 22 | My IP |
+   | Custom TCP | 3000 | 0.0.0.0/0 (web) |
+   | Custom TCP | 4000 | 0.0.0.0/0 (API) |
+7. Launch, then note the **Public IPv4 / DNS**.
+
+### Step 2 — Bootstrap (one command on the instance)
+
+SSH in and run the bundled setup script (installs Docker, clones the repo, starts the stack):
+
+```bash
+ssh -i your-key.pem ubuntu@<EC2_PUBLIC_IP>
+
+curl -fsSL https://raw.githubusercontent.com/zarifRahman/ai-website-builder/main/deploy/ec2-setup.sh | bash
+```
+
+First run creates `.env` from the template and stops. Add your codegen key(s):
+
+```bash
+nano ~/ai-website-builder/.env        # set ANTHROPIC_API_KEY (and/or GEMINI/OPENAI)
+cd ~/ai-website-builder && sudo docker compose up -d --build
+```
+
+- Web → `http://<EC2_PUBLIC_IP>:3000`
+- API → `http://<EC2_PUBLIC_IP>:4000`
+
+### Step 3 — Point the web app at the public IP
+
+The web image bakes `NEXT_PUBLIC_API_URL` at build time (default `localhost:4000`),
+so the browser must reach the API at the **public** address. Edit
+`docker-compose.yml` on the instance:
+
+```yaml
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://<EC2_PUBLIC_IP>:4000   # or https://api.yourdomain.com
+  api:
+    environment:
+      WEB_ORIGIN: http://<EC2_PUBLIC_IP>:3000               # CORS
+```
+
+Then rebuild: `sudo docker compose up -d --build`.
+
+### Step 4 (optional) — domain + HTTPS
+
+Put **Caddy** or **Nginx** in front as a reverse proxy to terminate TLS and map
+`yourdomain.com` → web:3000 and `api.yourdomain.com` → api:4000. Then set
+`NEXT_PUBLIC_API_URL`/`WEB_ORIGIN` to the `https://` domains and rebuild. Caddy
+gives automatic Let's Encrypt certs with a 3-line Caddyfile.
+
+### Managing the stack
+
+```bash
+sudo docker compose ps          # status
+sudo docker compose logs -f api # tail API logs
+sudo docker compose restart     # restart
+sudo docker compose down        # stop (volumes/data persist)
+git pull && sudo docker compose up -d --build   # update to latest
+```
+
+> Script: `deploy/ec2-setup.sh`. For production, consider an external managed
+> Postgres (RDS/Supabase/Neon) instead of the in-stack `db` container — point
+> the API's `DATABASE_URL` at it and drop the `db` service.
+
+---
+
 ## 6. Can I put everything on Vercel?
 
 **No — not the API as written.** Vercel is serverless: no persistent filesystem, no long-lived child processes, and a short execution limit. The API:
