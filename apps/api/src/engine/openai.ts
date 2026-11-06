@@ -72,7 +72,12 @@ export async function runOpenAIEngine(opts: {
     throw new Error("OPENAI_API_KEY is not set");
   }
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI();
+  // Construct via an explicit constructor cast so the build doesn't depend on
+  // the module-interop settings of whatever tsconfig compiles this file (some
+  // configs don't see the dynamic-import default as constructable → TS2351).
+  const client = new (OpenAI as unknown as {
+    new (opts?: { apiKey?: string }): import("openai").default;
+  })();
   const model = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
 
   const { projectId, onEvent } = opts;

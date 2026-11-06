@@ -79,6 +79,20 @@ The web app is a standard Next.js app in a pnpm monorepo. A `apps/web/vercel.jso
 
 > `NEXT_PUBLIC_API_URL` is baked in at build time (it's a `NEXT_PUBLIC_*` var). If you change the API URL later, **redeploy** the web app.
 
+### ⚠️ If your Vercel build fails with `templates/vite-react/...` or `openai.ts ... not constructable`
+
+That means Vercel is trying to **build the API** (`apps/api`) instead of just the
+web app. The API must never be built or run on Vercel. Fix it in the Vercel
+project settings:
+
+- **Settings → General → Root Directory = `apps/web`** (not the repo root, not `apps/api`).
+- Make sure the **Build Command** is the default / `pnpm --filter web build` (the
+  included `apps/web/vercel.json` already sets this) — **not** the root `pnpm build`,
+  which runs `pnpm -r build` and would compile the API too.
+
+With the root set to `apps/web`, Vercel never touches `apps/api` or the
+`templates/` folder, and the error disappears.
+
 ### Why `apps/web` as root works
 
 The web app depends on the `@aab/shared` workspace package. Vercel's monorepo support reads `pnpm-workspace.yaml` at the repo root and installs the whole workspace, so `@aab/shared` resolves during the build. The included `apps/web/vercel.json` pins the install/build to run from the repo root with pnpm.
